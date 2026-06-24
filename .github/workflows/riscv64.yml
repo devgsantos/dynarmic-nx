@@ -7,6 +7,8 @@ env:
 
 jobs:
   build_linux:
+    # Unimplemented
+    if: false
     strategy:
       matrix:
         platform: [ linux ]
@@ -20,33 +22,35 @@ jobs:
         run: >
           sudo apt-get update &&
           sudo apt-get install
-          gcc-10-riscv64-linux-gnu
-          g++-10-riscv64-linux-gnu
+          gcc-12-riscv64-linux-gnu
+          g++-12-riscv64-linux-gnu
           ninja-build
           qemu-user
 
       - name: Checkout dynarmic repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Ccache
         if: matrix.platform == 'linux'
         uses: hendrikmuhs/ccache-action@v1.2
 
-      - name: Checkout ext-boost repo
-        uses: actions/checkout@v2
+      - name: Install boost
+        id: install-boost
+        uses: MarkusJx/install-boost@v2
         with:
-          repository: MerryMage/ext-boost
-          path: externals/ext-boost
+          boost_version: 1.88.0
 
       - name: Configure CMake for RISCV64 (Linux)
         if: matrix.platform == 'linux'
         env:
-          CC: riscv64-linux-gnu-gcc-10
-          CXX: riscv64-linux-gnu-g++-10
+          CC: riscv64-linux-gnu-gcc-12
+          CXX: riscv64-linux-gnu-g++-12
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
         run: >
           cmake
           -B ${{github.workspace}}/build-riscv64
-          -DBOOST_INCLUDEDIR=${{github.workspace}}/externals/ext-boost
           -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
           -DDYNARMIC_TESTS_USE_UNICORN=0
           -DDYNARMIC_USE_LLVM=0
