@@ -54,7 +54,7 @@ SpinLockImpl impl;
 
 SpinLockImpl::SpinLockImpl()
         : mem{4096}
-        , code{mem.ptr(), mem.ptr()} {}
+        , code{mem.wptr(), mem.xptr()} {}
 
 void SpinLockImpl::Initialize() {
     mem.unprotect();

@@ -12,7 +12,8 @@
 	url = https://github.com/azahar-emu/mcl.git
 [submodule "oaknut"]
 	path = externals/oaknut
-	url = https://github.com/merryhime/oaknut.git
+	url = https://github.com/devgsantos/oaknut-nx.git
+	branch = main
 [submodule "robin-map"]
 	path = externals/robin-map
 	url = https://github.com/Tessil/robin-map.git

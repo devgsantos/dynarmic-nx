@@ -602,9 +602,20 @@ void EmitIR<IR::Opcode::A32CallSupervisor>(oaknut::CodeGenerator& code, EmitCont
     EmitRelocation(code, ctx, LinkTarget::CallSVC);
 
     if (ctx.conf.enable_cycle_counting) {
+#if defined(__SWITCH__)
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5
+        // A host callback can alter scheduling state. On Horizon, do not
+        // perform a second generated callback before returning to the
+        // dispatcher. Exhaust the current budget so the normal terminal
+        // path publishes guest state and exits this JIT invocation.
+        code.MOV(X0, 0);
+        code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
+        code.MOV(Xticks, X0);
+#else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
         code.MOV(Xticks, X0);
+#endif
     }
 }
 
@@ -624,9 +635,20 @@ void EmitIR<IR::Opcode::A32ExceptionRaised>(oaknut::CodeGenerator& code, EmitCon
     EmitRelocation(code, ctx, LinkTarget::ExceptionRaised);
 
     if (ctx.conf.enable_cycle_counting) {
+#if defined(__SWITCH__)
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5
+        // A host callback can alter scheduling state. On Horizon, do not
+        // perform a second generated callback before returning to the
+        // dispatcher. Exhaust the current budget so the normal terminal
+        // path publishes guest state and exits this JIT invocation.
+        code.MOV(X0, 0);
+        code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
+        code.MOV(Xticks, X0);
+#else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
         code.MOV(Xticks, X0);
+#endif
     }
 }
 

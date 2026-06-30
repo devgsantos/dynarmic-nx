@@ -27,10 +27,15 @@ static void* EmitCallTrampoline(oaknut::CodeGenerator& code, T* this_) {
 
     oaknut::Label l_addr, l_this;
 
+    constexpr RegisterList save_lr = ToRegList(X30);
+
     void* target = code.xptr<void*>();
+    ABI_PushRegisters(code, save_lr, 0);
     code.LDR(X0, l_this);
     code.LDR(Xscratch0, l_addr);
-    code.BR(Xscratch0);
+    code.BLR(Xscratch0);
+    ABI_PopRegisters(code, save_lr, 0);
+    code.RET();
 
     code.align(8);
     code.l(l_this);
@@ -540,6 +545,20 @@ void A64AddressSpace::EmitPrelude() {
 
     mem.invalidate_all();
     ProtectCodeMemory();
+
+#if defined(__SWITCH__)
+    const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
+    const auto rx_end = rx_base + code_cache_size;
+    const auto assert_rx_entry = [rx_base, rx_end](const void* entry) {
+        const auto address = reinterpret_cast<std::uintptr_t>(entry);
+        ASSERT(address >= rx_base);
+        ASSERT(address < rx_end);
+    };
+    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.run_code));
+    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.step_code));
+    assert_rx_entry(prelude_info.return_to_dispatcher);
+    assert_rx_entry(prelude_info.return_from_run_code);
+#endif
 }
 
 EmitConfig A64AddressSpace::GetEmitConfig() {

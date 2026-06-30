@@ -5,6 +5,8 @@
 
 #include "dynarmic/backend/arm64/a32_address_space.h"
 
+#include <cstdint>
+
 #include "dynarmic/backend/arm64/a32_jitstate.h"
 #include "dynarmic/backend/arm64/abi.h"
 #include "dynarmic/backend/arm64/devirtualize.h"
@@ -28,10 +30,15 @@ static void* EmitCallTrampoline(oaknut::CodeGenerator& code, T* this_) {
 
     oaknut::Label l_addr, l_this;
 
+    constexpr RegisterList save_lr = ToRegList(X30);
+
     void* target = code.xptr<void*>();
+    ABI_PushRegisters(code, save_lr, 0);
     code.LDR(X0, l_this);
     code.LDR(Xscratch0, l_addr);
-    code.BR(Xscratch0);
+    code.BLR(Xscratch0);
+    ABI_PopRegisters(code, save_lr, 0);
+    code.RET();
 
     code.align(8);
     code.l(l_this);
@@ -41,6 +48,36 @@ static void* EmitCallTrampoline(oaknut::CodeGenerator& code, T* this_) {
 
     return target;
 }
+
+#if defined(__SWITCH__)
+static void* EmitSwitchCallSvcTrampoline(oaknut::CodeGenerator& code, A32::UserCallbacks* this_) {
+    using namespace oaknut::util;
+
+    const auto info = Devirtualize<&A32::UserCallbacks::CallSVC>(this_);
+    constexpr RegisterList save_svc_and_lr = ToRegList(X1) | ToRegList(X30);
+
+    oaknut::Label l_addr, l_this;
+
+    void* target = code.xptr<void*>();
+
+    ABI_PushRegisters(code, save_svc_and_lr, 0);
+    code.LDR(X0, l_this);
+    code.LDR(Xscratch0, l_addr);
+    code.BLR(Xscratch0);
+    code.LDR(W1, SP, 0);
+    code.LDR(X30, SP, 8);
+    ABI_PopRegisters(code, save_svc_and_lr, 0);
+    code.RET();
+
+    code.align(8);
+    code.l(l_this);
+    code.dx(info.this_ptr);
+    code.l(l_addr);
+    code.dx(info.fn_ptr);
+
+    return target;
+}
+#endif
 
 template<auto mfp, typename T>
 static void* EmitWrappedReadCallTrampoline(oaknut::CodeGenerator& code, T* this_) {
@@ -214,7 +251,11 @@ void A32AddressSpace::EmitPrelude() {
     prelude_info.exclusive_write_memory_16 = EmitExclusiveWriteCallTrampoline<&A32::UserCallbacks::MemoryWriteExclusive16, u16>(code, conf);
     prelude_info.exclusive_write_memory_32 = EmitExclusiveWriteCallTrampoline<&A32::UserCallbacks::MemoryWriteExclusive32, u32>(code, conf);
     prelude_info.exclusive_write_memory_64 = EmitExclusiveWriteCallTrampoline<&A32::UserCallbacks::MemoryWriteExclusive64, u64>(code, conf);
+#if defined(__SWITCH__)
+    prelude_info.call_svc = EmitSwitchCallSvcTrampoline(code, conf.callbacks);
+#else
     prelude_info.call_svc = EmitCallTrampoline<&A32::UserCallbacks::CallSVC>(code, conf.callbacks);
+#endif
     prelude_info.exception_raised = EmitCallTrampoline<&A32::UserCallbacks::ExceptionRaised>(code, conf.callbacks);
     prelude_info.isb_raised = EmitCallTrampoline<&A32::UserCallbacks::InstructionSynchronizationBarrierRaised>(code, conf.callbacks);
     prelude_info.add_ticks = EmitCallTrampoline<&A32::UserCallbacks::AddTicks>(code, conf.callbacks);
@@ -364,6 +405,20 @@ void A32AddressSpace::EmitPrelude() {
 
     mem.invalidate_all();
     ProtectCodeMemory();
+
+#if defined(__SWITCH__)
+    const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
+    const auto rx_end = rx_base + code_cache_size;
+    const auto assert_rx_entry = [rx_base, rx_end](const void* entry) {
+        const auto address = reinterpret_cast<std::uintptr_t>(entry);
+        ASSERT(address >= rx_base);
+        ASSERT(address < rx_end);
+    };
+    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.run_code));
+    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.step_code));
+    assert_rx_entry(prelude_info.return_to_dispatcher);
+    assert_rx_entry(prelude_info.return_from_run_code);
+#endif
 }
 
 EmitConfig A32AddressSpace::GetEmitConfig() {

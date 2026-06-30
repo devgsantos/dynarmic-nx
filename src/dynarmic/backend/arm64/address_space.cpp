@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: 0BSD
  */
 
+#include <cstdint>
 #include <cstdio>
 
 #include <mcl/bit_cast.hpp>
@@ -23,14 +24,18 @@ namespace Dynarmic::Backend::Arm64 {
 AddressSpace::AddressSpace(size_t code_cache_size)
         : code_cache_size(code_cache_size)
         , mem(code_cache_size)
-        , code(mem.ptr(), mem.ptr())
+        , code(mem.wptr(), mem.xptr())
         , fastmem_manager(exception_handler) {
     ASSERT_MSG(code_cache_size <= 128 * 1024 * 1024, "code_cache_size > 128 MiB not currently supported");
 
+    // Horizon does not use Dynarmic's POSIX signal/fastmem exception path.
+    // Switch builds use page-table/callback memory access instead.
+#if !defined(__SWITCH__)
     exception_handler.Register(mem, code_cache_size);
     exception_handler.SetFastmemCallback([this](u64 host_pc) {
         return FastmemCallback(host_pc);
     });
+#endif
 }
 
 AddressSpace::~AddressSpace() = default;
@@ -98,8 +103,12 @@ void AddressSpace::ClearCache() {
 }
 
 void AddressSpace::DumpDisassembly() const {
-    for (u32* ptr = mem.ptr(); ptr < code.xptr<u32*>(); ptr++) {
-        std::printf("%s", Common::DisassembleAArch64(*ptr, mcl::bit_cast<u64>(ptr)).c_str());
+    u32* write_ptr = mem.wptr();
+    for (u32* exec_ptr = mem.xptr(); exec_ptr < code.xptr<u32*>();
+         ++write_ptr, ++exec_ptr) {
+        std::printf("%s", Common::DisassembleAArch64(*write_ptr,
+                                                       mcl::bit_cast<u64>(exec_ptr))
+                              .c_str());
     }
 }
 
@@ -116,14 +125,22 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
 
     EmittedBlockInfo block_info = EmitArm64(code, std::move(block), GetEmitConfig(), fastmem_manager);
 
+    Link(block_info);
+
+    mem.invalidate(reinterpret_cast<u32*>(block_info.entry_point), block_info.size);
+    ProtectCodeMemory();
+
+    const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
+    const auto entry = reinterpret_cast<std::uintptr_t>(block_info.entry_point);
+    ASSERT(entry >= rx_base);
+    ASSERT(entry < rx_base + code_cache_size);
+
     ASSERT(block_entries.insert({block.Location(), block_info.entry_point}).second);
     ASSERT(reverse_block_entries.insert({block_info.entry_point, block.Location()}).second);
     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
 
-    Link(block_info);
+    UnprotectCodeMemory();
     RelinkForDescriptor(block.Location(), block_info.entry_point);
-
-    mem.invalidate(reinterpret_cast<u32*>(block_info.entry_point), block_info.size);
     ProtectCodeMemory();
 
     RegisterNewBasicBlock(block, block_info);
@@ -136,7 +153,7 @@ void AddressSpace::Link(EmittedBlockInfo& block_info) {
     using namespace oaknut::util;
 
     for (auto [ptr_offset, target] : block_info.relocations) {
-        CodeGenerator c{mem.ptr(), mem.ptr()};
+        CodeGenerator c{mem.wptr(), mem.xptr()};
         c.set_xptr(reinterpret_cast<u32*>(block_info.entry_point + ptr_offset));
 
         switch (target) {
@@ -276,7 +293,7 @@ void AddressSpace::LinkBlockLinks(const CodePtr entry_point, const CodePtr targe
     using namespace oaknut::util;
 
     for (auto [ptr_offset, type] : block_relocations_list) {
-        CodeGenerator c{mem.ptr(), mem.ptr()};
+        CodeGenerator c{mem.wptr(), mem.xptr()};
         c.set_xptr(reinterpret_cast<u32*>(entry_point + ptr_offset));
 
         switch (type) {
