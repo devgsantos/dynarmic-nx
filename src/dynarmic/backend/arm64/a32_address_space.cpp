@@ -219,9 +219,36 @@ static void* EmitExclusiveWriteCallTrampoline(oaknut::CodeGenerator& code, const
 
 A32AddressSpace::A32AddressSpace(const A32::UserConfig& conf)
         : AddressSpace(conf.code_cache_size)
-        , conf(conf) {
+        , conf(conf)
+#if defined(__SWITCH__)
+        , host_get_ticks_remaining(Devirtualize<&A32::UserCallbacks::GetTicksRemaining>(conf.callbacks))
+        , host_add_ticks(Devirtualize<&A32::UserCallbacks::AddTicks>(conf.callbacks))
+#endif
+{
     EmitPrelude();
 }
+
+#if defined(__SWITCH__)
+u64 A32AddressSpace::HostGetTicksRemaining() const {
+    using HostGetTicksRemainingFunc = u64 (*)(void*);
+    const auto fn = mcl::bit_cast<HostGetTicksRemainingFunc>(host_get_ticks_remaining.fn_ptr);
+    return fn(reinterpret_cast<void*>(host_get_ticks_remaining.this_ptr));
+}
+
+void A32AddressSpace::HostAddTicks(u64 ticks) const {
+    using HostAddTicksFunc = void (*)(void*, u64);
+    const auto fn = mcl::bit_cast<HostAddTicksFunc>(host_add_ticks.fn_ptr);
+    fn(reinterpret_cast<void*>(host_add_ticks.this_ptr), ticks);
+}
+
+u64 A32AddressSpace::HostGetTicksRemainingTarget() const {
+    return host_get_ticks_remaining.fn_ptr;
+}
+
+u64 A32AddressSpace::HostAddTicksTarget() const {
+    return host_add_ticks.fn_ptr;
+}
+#endif
 
 IR::Block A32AddressSpace::GenerateIR(IR::LocationDescriptor descriptor) const {
     IR::Block ir_block = A32::Translate(A32::LocationDescriptor{descriptor}, conf.callbacks, {conf.arch_version, conf.define_unpredictable_behaviour, conf.hook_hint_instructions});

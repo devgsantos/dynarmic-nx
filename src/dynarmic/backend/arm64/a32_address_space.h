@@ -9,6 +9,10 @@
 #include "dynarmic/backend/block_range_information.h"
 #include "dynarmic/interface/A32/config.h"
 
+#if defined(__SWITCH__)
+#include "dynarmic/backend/arm64/devirtualize.h"
+#endif
+
 namespace Dynarmic::Backend::Arm64 {
 
 struct EmittedBlockInfo;
@@ -29,6 +33,15 @@ protected:
     void RegisterNewBasicBlock(const IR::Block& block, const EmittedBlockInfo& block_info) override;
 
     const A32::UserConfig conf;
+#if defined(__SWITCH__)
+    DevirtualizedCall host_get_ticks_remaining;
+    DevirtualizedCall host_add_ticks;
+
+    u64 HostGetTicksRemaining() const;
+    void HostAddTicks(u64 ticks) const;
+    u64 HostGetTicksRemainingTarget() const;
+    u64 HostAddTicksTarget() const;
+#endif
     BlockRangeInformation<u32> block_ranges;
 };
 
