@@ -603,14 +603,16 @@ void EmitIR<IR::Opcode::A32CallSupervisor>(oaknut::CodeGenerator& code, EmitCont
 
     if (ctx.conf.enable_cycle_counting) {
 #if defined(__SWITCH__)
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5_SUPERSEDED
         // A host callback can alter scheduling state. On Horizon, do not
         // perform a second generated callback before returning to the
         // dispatcher. Exhaust the current budget so the normal terminal
         // path publishes guest state and exits this JIT invocation.
-        code.MOV(X0, 0);
-        code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
-        code.MOV(Xticks, X0);
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_BUDGET_V6
+        // Keep the original cycles_to_run stack value. Setting only Xticks
+        // to zero makes return_from_run_code report the full remaining budget
+        // through AddTicks instead of incorrectly reporting zero elapsed cycles.
+        code.MOV(Xticks, 0);
 #else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
@@ -636,14 +638,16 @@ void EmitIR<IR::Opcode::A32ExceptionRaised>(oaknut::CodeGenerator& code, EmitCon
 
     if (ctx.conf.enable_cycle_counting) {
 #if defined(__SWITCH__)
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5_SUPERSEDED
         // A host callback can alter scheduling state. On Horizon, do not
         // perform a second generated callback before returning to the
         // dispatcher. Exhaust the current budget so the normal terminal
         // path publishes guest state and exits this JIT invocation.
-        code.MOV(X0, 0);
-        code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
-        code.MOV(Xticks, X0);
+        // AZAHAR_SWITCH_POST_HOST_CALLBACK_BUDGET_V6
+        // Keep the original cycles_to_run stack value. Setting only Xticks
+        // to zero makes return_from_run_code report the full remaining budget
+        // through AddTicks instead of incorrectly reporting zero elapsed cycles.
+        code.MOV(Xticks, 0);
 #else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));

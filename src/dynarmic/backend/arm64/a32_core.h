@@ -37,12 +37,34 @@ public:
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             6, run_entry, A32::LocationDescriptor{location_descriptor}.PC());
-        const HaltReason result = process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
+        // AZAHAR_SWITCH_HOST_TICK_BUDGET_CALLSITE_V6_1
+#if defined(__SWITCH__)
+        const u64 ticks_to_run = process.conf.enable_cycle_counting
+                                     ? process.conf.callbacks->GetTicksRemaining()
+                                     : 0;
+        const HaltReason result = process.prelude_info.run_code(
+            entry_point, &thread_ctx, halt_reason, ticks_to_run);
+#else
+        const HaltReason result =
+            process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
+#endif
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             7, run_entry, A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC());
         return result;
 #else
+#if defined(__SWITCH__)
+        // AZAHAR_SWITCH_HOST_TICK_BUDGET_V6
+        // Resolve the virtual timing callback in C++ and pass its result in X3.
+        // Generated code no longer tail-branches through X16 merely to obtain
+        // the initial cycle budget.
+        const u64 ticks_to_run = process.conf.enable_cycle_counting
+                                     ? process.conf.callbacks->GetTicksRemaining()
+                                     : 0;
+        return process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason,
+                                             ticks_to_run);
+#else
         return process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
+#endif
 #endif
     }
 
@@ -54,12 +76,24 @@ public:
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry, location_descriptor.PC());
-        const HaltReason result = process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
+#if defined(__SWITCH__)
+        const HaltReason result = process.prelude_info.step_code(
+            entry_point, &thread_ctx, halt_reason, 1);
+#else
+        const HaltReason result =
+            process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
+#endif
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             7, run_entry, A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC());
         return result;
 #else
+#if defined(__SWITCH__)
+        // The generated single-step prelude retains its fixed one-cycle budget;
+        // the fourth argument only keeps the Switch function signature ABI-correct.
+        return process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason, 1);
+#else
         return process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
+#endif
 #endif
     }
 };

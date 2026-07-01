@@ -285,8 +285,16 @@ void A32AddressSpace::EmitPrelude() {
         }
 
         if (conf.enable_cycle_counting) {
+#if defined(__SWITCH__)
+            // AZAHAR_SWITCH_HOST_TICK_BUDGET_V6
+            // A32Core passes the budget as the fourth AAPCS64 argument (X3).
+            // Copy it before entering guest code; do not invoke the generated
+            // GetTicksRemaining trampoline on Horizon.
+            code.MOV(Xticks, X3);
+#else
             code.BL(prelude_info.get_ticks_remaining);
             code.MOV(Xticks, X0);
+#endif
             code.STR(Xticks, SP, offsetof(StackLayout, cycles_to_run));
         }
 

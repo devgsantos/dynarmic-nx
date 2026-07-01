@@ -86,7 +86,17 @@ protected:
     struct PreludeInfo {
         std::ptrdiff_t end_of_prelude;
 
-        using RunCodeFuncType = HaltReason (*)(CodePtr entry_point, void* jit_state, volatile u32* halt_reason);
+        // AZAHAR_SWITCH_HOST_TICK_BUDGET_V6
+#if defined(__SWITCH__)
+        // Horizon receives the cycle budget from ordinary C++ code. This avoids
+        // entering a generated virtual-callback trampoline before every block.
+        using RunCodeFuncType = HaltReason (*)(CodePtr entry_point, void* jit_state,
+                                                   volatile u32* halt_reason,
+                                                   u64 ticks_to_run);
+#else
+        using RunCodeFuncType = HaltReason (*)(CodePtr entry_point, void* jit_state,
+                                                   volatile u32* halt_reason);
+#endif
         RunCodeFuncType run_code;
         RunCodeFuncType step_code;
         void* return_to_dispatcher;
