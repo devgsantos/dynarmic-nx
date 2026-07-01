@@ -38,7 +38,8 @@ public:
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry,
                                                         static_cast<std::uint32_t>(
                                                             A64::LocationDescriptor{location_descriptor}.PC()));
-        const HaltReason result = process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
+        const HaltReason result = process.prelude_info.run_code(
+            entry_point, &thread_ctx, halt_reason, 0, nullptr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             7, run_entry, static_cast<std::uint32_t>(
                               A64::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC()));
@@ -57,7 +58,8 @@ public:
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry,
                                                         static_cast<std::uint32_t>(location_descriptor.PC()));
-        const HaltReason result = process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
+        const HaltReason result = process.prelude_info.step_code(
+            entry_point, &thread_ctx, halt_reason, 0, nullptr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             7, run_entry, static_cast<std::uint32_t>(thread_ctx.GetLocationDescriptor().PC()));
         return result;

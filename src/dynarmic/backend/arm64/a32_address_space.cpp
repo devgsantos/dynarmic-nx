@@ -22,6 +22,15 @@
 
 namespace Dynarmic::Backend::Arm64 {
 
+#if defined(__SWITCH__)
+extern "C" bool azahar_switch_dynarmic_jit_is_rx_address(
+    std::uintptr_t address) noexcept;
+extern "C" std::uint32_t azahar_switch_dynarmic_jit_get_range_id(
+    std::uintptr_t address) noexcept;
+extern "C" void azahar_switch_dynarmic_jit_log_prelude_target(
+    const char* name, std::uintptr_t address) noexcept;
+#endif
+
 template<auto mfp, typename T>
 static void* EmitCallTrampoline(oaknut::CodeGenerator& code, T* this_) {
     using namespace oaknut::util;
@@ -258,8 +267,13 @@ void A32AddressSpace::EmitPrelude() {
 #endif
     prelude_info.exception_raised = EmitCallTrampoline<&A32::UserCallbacks::ExceptionRaised>(code, conf.callbacks);
     prelude_info.isb_raised = EmitCallTrampoline<&A32::UserCallbacks::InstructionSynchronizationBarrierRaised>(code, conf.callbacks);
+#if defined(__SWITCH__)
+    prelude_info.add_ticks = nullptr;
+    prelude_info.get_ticks_remaining = nullptr;
+#else
     prelude_info.add_ticks = EmitCallTrampoline<&A32::UserCallbacks::AddTicks>(code, conf.callbacks);
     prelude_info.get_ticks_remaining = EmitCallTrampoline<&A32::UserCallbacks::GetTicksRemaining>(code, conf.callbacks);
+#endif
 
     oaknut::Label return_from_run_code, l_return_to_dispatcher;
 
@@ -270,6 +284,9 @@ void A32AddressSpace::EmitPrelude() {
         code.MOV(X19, X0);
         code.MOV(Xstate, X1);
         code.MOV(Xhalt, X2);
+#if defined(__SWITCH__)
+        code.STR(X4, SP, offsetof(StackLayout, ticks_executed_out));
+#endif
         if (conf.page_table) {
             code.MOV(Xpagetable, mcl::bit_cast<u64>(conf.page_table));
         }
@@ -286,10 +303,6 @@ void A32AddressSpace::EmitPrelude() {
 
         if (conf.enable_cycle_counting) {
 #if defined(__SWITCH__)
-            // AZAHAR_SWITCH_HOST_TICK_BUDGET_V6
-            // A32Core passes the budget as the fourth AAPCS64 argument (X3).
-            // Copy it before entering guest code; do not invoke the generated
-            // GetTicksRemaining trampoline on Horizon.
             code.MOV(Xticks, X3);
 #else
             code.BL(prelude_info.get_ticks_remaining);
@@ -317,6 +330,9 @@ void A32AddressSpace::EmitPrelude() {
         code.MOV(X19, X0);
         code.MOV(Xstate, X1);
         code.MOV(Xhalt, X2);
+#if defined(__SWITCH__)
+        code.STR(X4, SP, offsetof(StackLayout, ticks_executed_out));
+#endif
         if (conf.page_table) {
             code.MOV(Xpagetable, mcl::bit_cast<u64>(conf.page_table));
         }
@@ -389,7 +405,15 @@ void A32AddressSpace::EmitPrelude() {
         if (conf.enable_cycle_counting) {
             code.LDR(X1, SP, offsetof(StackLayout, cycles_to_run));
             code.SUB(X1, X1, Xticks);
+#if defined(__SWITCH__)
+            oaknut::Label skip_store_ticks;
+            code.LDR(X2, SP, offsetof(StackLayout, ticks_executed_out));
+            code.CBZ(X2, skip_store_ticks);
+            code.STR(X1, X2);
+            code.l(skip_store_ticks);
+#else
             code.BL(prelude_info.add_ticks);
+#endif
         }
 
         code.LDR(Wscratch0, SP, offsetof(StackLayout, save_host_fpcr));
@@ -415,17 +439,67 @@ void A32AddressSpace::EmitPrelude() {
     ProtectCodeMemory();
 
 #if defined(__SWITCH__)
-    const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
-    const auto rx_end = rx_base + code_cache_size;
-    const auto assert_rx_entry = [rx_base, rx_end](const void* entry) {
+    const auto run_code_range = azahar_switch_dynarmic_jit_get_range_id(
+        reinterpret_cast<std::uintptr_t>(prelude_info.run_code));
+    const auto assert_rx_entry = [run_code_range](const char* name, const void* entry,
+                                                  bool offset_zero_ok = false) {
         const auto address = reinterpret_cast<std::uintptr_t>(entry);
-        ASSERT(address >= rx_base);
-        ASSERT(address < rx_end);
+        azahar_switch_dynarmic_jit_log_prelude_target(name, address);
+        ASSERT(azahar_switch_dynarmic_jit_is_rx_address(address));
+        ASSERT(azahar_switch_dynarmic_jit_get_range_id(address) == run_code_range);
+        (void)offset_zero_ok;
     };
-    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.run_code));
-    assert_rx_entry(reinterpret_cast<const void*>(prelude_info.step_code));
-    assert_rx_entry(prelude_info.return_to_dispatcher);
-    assert_rx_entry(prelude_info.return_from_run_code);
+    const auto assert_optional_rx_entry = [&assert_rx_entry](const char* name,
+                                                            const void* entry) {
+        if (entry != nullptr) {
+            assert_rx_entry(name, entry);
+        } else {
+            azahar_switch_dynarmic_jit_log_prelude_target(name, 0);
+        }
+    };
+
+    assert_rx_entry("run_code", reinterpret_cast<const void*>(prelude_info.run_code), true);
+    assert_rx_entry("step_code", reinterpret_cast<const void*>(prelude_info.step_code));
+    assert_rx_entry("return_to_dispatcher", prelude_info.return_to_dispatcher);
+    assert_rx_entry("return_from_run_code", prelude_info.return_from_run_code);
+    assert_optional_rx_entry("read_memory_8", prelude_info.read_memory_8);
+    assert_optional_rx_entry("read_memory_16", prelude_info.read_memory_16);
+    assert_optional_rx_entry("read_memory_32", prelude_info.read_memory_32);
+    assert_optional_rx_entry("read_memory_64", prelude_info.read_memory_64);
+    assert_optional_rx_entry("read_memory_128", prelude_info.read_memory_128);
+    assert_optional_rx_entry("wrapped_read_memory_8", prelude_info.wrapped_read_memory_8);
+    assert_optional_rx_entry("wrapped_read_memory_16", prelude_info.wrapped_read_memory_16);
+    assert_optional_rx_entry("wrapped_read_memory_32", prelude_info.wrapped_read_memory_32);
+    assert_optional_rx_entry("wrapped_read_memory_64", prelude_info.wrapped_read_memory_64);
+    assert_optional_rx_entry("wrapped_read_memory_128", prelude_info.wrapped_read_memory_128);
+    assert_optional_rx_entry("exclusive_read_memory_8", prelude_info.exclusive_read_memory_8);
+    assert_optional_rx_entry("exclusive_read_memory_16", prelude_info.exclusive_read_memory_16);
+    assert_optional_rx_entry("exclusive_read_memory_32", prelude_info.exclusive_read_memory_32);
+    assert_optional_rx_entry("exclusive_read_memory_64", prelude_info.exclusive_read_memory_64);
+    assert_optional_rx_entry("exclusive_read_memory_128", prelude_info.exclusive_read_memory_128);
+    assert_optional_rx_entry("write_memory_8", prelude_info.write_memory_8);
+    assert_optional_rx_entry("write_memory_16", prelude_info.write_memory_16);
+    assert_optional_rx_entry("write_memory_32", prelude_info.write_memory_32);
+    assert_optional_rx_entry("write_memory_64", prelude_info.write_memory_64);
+    assert_optional_rx_entry("write_memory_128", prelude_info.write_memory_128);
+    assert_optional_rx_entry("wrapped_write_memory_8", prelude_info.wrapped_write_memory_8);
+    assert_optional_rx_entry("wrapped_write_memory_16", prelude_info.wrapped_write_memory_16);
+    assert_optional_rx_entry("wrapped_write_memory_32", prelude_info.wrapped_write_memory_32);
+    assert_optional_rx_entry("wrapped_write_memory_64", prelude_info.wrapped_write_memory_64);
+    assert_optional_rx_entry("wrapped_write_memory_128", prelude_info.wrapped_write_memory_128);
+    assert_optional_rx_entry("exclusive_write_memory_8", prelude_info.exclusive_write_memory_8);
+    assert_optional_rx_entry("exclusive_write_memory_16", prelude_info.exclusive_write_memory_16);
+    assert_optional_rx_entry("exclusive_write_memory_32", prelude_info.exclusive_write_memory_32);
+    assert_optional_rx_entry("exclusive_write_memory_64", prelude_info.exclusive_write_memory_64);
+    assert_optional_rx_entry("exclusive_write_memory_128", prelude_info.exclusive_write_memory_128);
+    assert_optional_rx_entry("call_svc", prelude_info.call_svc);
+    assert_optional_rx_entry("exception_raised", prelude_info.exception_raised);
+    assert_optional_rx_entry("dc_raised", prelude_info.dc_raised);
+    assert_optional_rx_entry("ic_raised", prelude_info.ic_raised);
+    assert_optional_rx_entry("isb_raised", prelude_info.isb_raised);
+    assert_optional_rx_entry("get_cntpct", prelude_info.get_cntpct);
+    assert_optional_rx_entry("add_ticks", prelude_info.add_ticks);
+    assert_optional_rx_entry("get_ticks_remaining", prelude_info.get_ticks_remaining);
 #endif
 }
 

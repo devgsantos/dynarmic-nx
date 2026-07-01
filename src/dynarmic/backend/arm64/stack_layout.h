@@ -35,6 +35,8 @@ struct alignas(16) StackLayout {
 
     s64 cycles_to_run;
 
+    u64 ticks_executed_out;
+
     u32 save_host_fpcr;
 
     bool check_bit;

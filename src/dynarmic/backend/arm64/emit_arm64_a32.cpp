@@ -593,9 +593,11 @@ void EmitIR<IR::Opcode::A32CallSupervisor>(oaknut::CodeGenerator& code, EmitCont
     ctx.reg_alloc.PrepareForCall();
 
     if (ctx.conf.enable_cycle_counting) {
+#if !defined(__SWITCH__)
         code.LDR(X1, SP, offsetof(StackLayout, cycles_to_run));
         code.SUB(X1, X1, Xticks);
         EmitRelocation(code, ctx, LinkTarget::AddTicks);
+#endif
     }
 
     code.MOV(W1, args[0].GetImmediateU32());
@@ -603,16 +605,7 @@ void EmitIR<IR::Opcode::A32CallSupervisor>(oaknut::CodeGenerator& code, EmitCont
 
     if (ctx.conf.enable_cycle_counting) {
 #if defined(__SWITCH__)
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5_SUPERSEDED
-        // A host callback can alter scheduling state. On Horizon, do not
-        // perform a second generated callback before returning to the
-        // dispatcher. Exhaust the current budget so the normal terminal
-        // path publishes guest state and exits this JIT invocation.
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_BUDGET_V6
-        // Keep the original cycles_to_run stack value. Setting only Xticks
-        // to zero makes return_from_run_code report the full remaining budget
-        // through AddTicks instead of incorrectly reporting zero elapsed cycles.
-        code.MOV(Xticks, 0);
+        EmitRelocation(code, ctx, LinkTarget::ReturnFromRunCode);
 #else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
@@ -627,9 +620,11 @@ void EmitIR<IR::Opcode::A32ExceptionRaised>(oaknut::CodeGenerator& code, EmitCon
     ctx.reg_alloc.PrepareForCall();
 
     if (ctx.conf.enable_cycle_counting) {
+#if !defined(__SWITCH__)
         code.LDR(X1, SP, offsetof(StackLayout, cycles_to_run));
         code.SUB(X1, X1, Xticks);
         EmitRelocation(code, ctx, LinkTarget::AddTicks);
+#endif
     }
 
     code.MOV(W1, args[0].GetImmediateU32());
@@ -638,16 +633,7 @@ void EmitIR<IR::Opcode::A32ExceptionRaised>(oaknut::CodeGenerator& code, EmitCon
 
     if (ctx.conf.enable_cycle_counting) {
 #if defined(__SWITCH__)
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_FORCE_EXIT_V5_SUPERSEDED
-        // A host callback can alter scheduling state. On Horizon, do not
-        // perform a second generated callback before returning to the
-        // dispatcher. Exhaust the current budget so the normal terminal
-        // path publishes guest state and exits this JIT invocation.
-        // AZAHAR_SWITCH_POST_HOST_CALLBACK_BUDGET_V6
-        // Keep the original cycles_to_run stack value. Setting only Xticks
-        // to zero makes return_from_run_code report the full remaining budget
-        // through AddTicks instead of incorrectly reporting zero elapsed cycles.
-        code.MOV(Xticks, 0);
+        EmitRelocation(code, ctx, LinkTarget::ReturnFromRunCode);
 #else
         EmitRelocation(code, ctx, LinkTarget::GetTicksRemaining);
         code.STR(X0, SP, offsetof(StackLayout, cycles_to_run));
