@@ -29,6 +29,9 @@ extern "C" std::uint32_t azahar_switch_dynarmic_jit_get_range_id(
     std::uintptr_t address) noexcept;
 extern "C" void azahar_switch_dynarmic_jit_log_prelude_target(
     const char* name, std::uintptr_t address) noexcept;
+extern "C" void azahar_switch_dynarmic_jit_log_a32_svc(
+    std::uint32_t svc, std::uintptr_t callback_target, std::uintptr_t continuation,
+    std::uint32_t guest_pc) noexcept;
 #endif
 
 template<auto mfp, typename T>
@@ -63,13 +66,24 @@ static void* EmitSwitchCallSvcTrampoline(oaknut::CodeGenerator& code, A32::UserC
     using namespace oaknut::util;
 
     const auto info = Devirtualize<&A32::UserCallbacks::CallSVC>(this_);
+    using LogA32SvcFunc = void (*)(std::uint32_t, std::uintptr_t, std::uintptr_t,
+                                   std::uint32_t);
+    const LogA32SvcFunc log_a32_svc = azahar_switch_dynarmic_jit_log_a32_svc;
     constexpr RegisterList save_svc_and_lr = ToRegList(X1) | ToRegList(X30);
 
-    oaknut::Label l_addr, l_this;
+    oaknut::Label l_addr, l_log_a32_svc, l_this;
 
     void* target = code.xptr<void*>();
 
     ABI_PushRegisters(code, save_svc_and_lr, 0);
+    code.MOV(W0, W1);
+    code.LDR(X1, l_addr);
+    code.MOV(X2, X30);
+    code.LDR(W3, Xstate, offsetof(A32JitState, regs) + 15 * sizeof(u32));
+    code.LDR(Xscratch0, l_log_a32_svc);
+    code.BLR(Xscratch0);
+
+    code.LDR(W1, SP, 0);
     code.LDR(X0, l_this);
     code.LDR(Xscratch0, l_addr);
     code.BLR(Xscratch0);
@@ -83,6 +97,8 @@ static void* EmitSwitchCallSvcTrampoline(oaknut::CodeGenerator& code, A32::UserC
     code.dx(info.this_ptr);
     code.l(l_addr);
     code.dx(info.fn_ptr);
+    code.l(l_log_a32_svc);
+    code.dx(mcl::bit_cast<u64>(log_a32_svc));
 
     return target;
 }
