@@ -236,6 +236,16 @@ void A32AddressSpace::EmitPrelude() {
 
     UnprotectCodeMemory();
 
+    prelude_info.read_memory_128 = nullptr;
+    prelude_info.wrapped_read_memory_128 = nullptr;
+    prelude_info.exclusive_read_memory_128 = nullptr;
+    prelude_info.write_memory_128 = nullptr;
+    prelude_info.wrapped_write_memory_128 = nullptr;
+    prelude_info.exclusive_write_memory_128 = nullptr;
+    prelude_info.dc_raised = nullptr;
+    prelude_info.ic_raised = nullptr;
+    prelude_info.get_cntpct = nullptr;
+
     prelude_info.read_memory_8 = EmitCallTrampoline<&A32::UserCallbacks::MemoryRead8>(code, conf.callbacks);
     prelude_info.read_memory_16 = EmitCallTrampoline<&A32::UserCallbacks::MemoryRead16>(code, conf.callbacks);
     prelude_info.read_memory_32 = EmitCallTrampoline<&A32::UserCallbacks::MemoryRead32>(code, conf.callbacks);
