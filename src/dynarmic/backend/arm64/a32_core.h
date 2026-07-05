@@ -12,6 +12,9 @@
 
 #include "dynarmic/backend/arm64/a32_address_space.h"
 #include "dynarmic/backend/arm64/a32_jitstate.h"
+#if defined(__SWITCH__)
+#include "dynarmic/interface/A32/switch_cycle_budget.h"
+#endif
 
 #if defined(__SWITCH__)
 extern "C" bool azahar_switch_dynarmic_jit_is_rx_address(
@@ -35,27 +38,22 @@ public:
         const auto run_entry = reinterpret_cast<std::uintptr_t>(entry_point);
         const auto guest_pc = A32::LocationDescriptor{location_descriptor}.PC();
         u64 ticks_executed = 0;
-        u64 ticks_to_run = 0;
 
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
 
-        if (process.conf.enable_cycle_counting) {
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry, guest_pc);
-            ticks_to_run = process.HostGetTicksRemaining();
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(7, run_entry, guest_pc);
-        }
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry, guest_pc);
+        const u64 ticks_to_run = A32::SwitchCycleBudget::GetRequestedTicks();
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(7, run_entry, guest_pc);
 
         const HaltReason result = RunWithTicks(process, thread_ctx, halt_reason,
                                                ticks_to_run, ticks_executed, false);
 
-        if (process.conf.enable_cycle_counting) {
-            const auto guest_pc_after =
-                A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
-            process.HostAddTicks(ticks_executed);
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
-        }
+        const auto guest_pc_after =
+            A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
+        A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
         return result;
 #else
         return process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
@@ -98,13 +96,11 @@ public:
 
         const HaltReason result = StepWithTicks(process, thread_ctx, halt_reason,
                                                 ticks_executed, false);
-        if (process.conf.enable_cycle_counting) {
-            const auto guest_pc_after =
-                A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
-            process.HostAddTicks(ticks_executed);
-            azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
-        }
+        const auto guest_pc_after =
+            A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
+        A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
+        azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
         return result;
 #else
         return process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
