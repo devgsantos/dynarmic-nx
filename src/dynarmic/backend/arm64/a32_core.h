@@ -24,10 +24,20 @@ extern "C" void azahar_switch_dynarmic_jit_set_breadcrumb_phase(
     std::uint32_t phase, std::uintptr_t block_entry, std::uint32_t guest_pc) noexcept;
 extern "C" std::uint32_t azahar_switch_dynarmic_jit_get_range_id(
     std::uintptr_t address) noexcept;
-extern "C" std::uint64_t azahar_switch_dynarmic_host_get_ticks_remaining(
-    void* callbacks) noexcept;
-extern "C" void azahar_switch_dynarmic_host_add_ticks(
-    void* callbacks, std::uint64_t ticks) noexcept;
+
+extern "C" inline std::uint64_t azahar_switch_dynarmic_host_get_ticks_remaining(
+    void* opaque) noexcept {
+    auto* callbacks = static_cast<Dynarmic::A32::UserCallbacks*>(opaque);
+    return callbacks != nullptr ? callbacks->GetTicksRemaining() : 0;
+}
+
+extern "C" inline void azahar_switch_dynarmic_host_add_ticks(
+    void* opaque, std::uint64_t ticks) noexcept {
+    auto* callbacks = static_cast<Dynarmic::A32::UserCallbacks*>(opaque);
+    if (callbacks != nullptr) {
+        callbacks->AddTicks(ticks);
+    }
+}
 #endif
 
 namespace Dynarmic::Backend::Arm64 {
