@@ -28,11 +28,26 @@ public:
      */
     HaltReason Run();
 
+#if defined(__SWITCH__)
+    /**
+     * Runs the emulated CPU with a host-supplied cycle budget.
+     * This avoids callback dispatch across the Switch executable/library boundary.
+     */
+    HaltReason RunWithTicks(std::uint64_t ticks_to_run, std::uint64_t& ticks_executed);
+#endif
+
     /**
      * Steps the emulated CPU.
      * Cannot be recursively called.
      */
     HaltReason Step();
+
+#if defined(__SWITCH__)
+    /**
+     * Steps the emulated CPU and reports the number of cycles consumed.
+     */
+    HaltReason StepWithTicks(std::uint64_t& ticks_executed);
+#endif
 
     /**
      * Clears the code cache of all compiled code.
