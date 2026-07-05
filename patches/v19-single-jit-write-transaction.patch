@@ -1,0 +1,29 @@
+diff --git a/src/dynarmic/backend/arm64/address_space.cpp b/src/dynarmic/backend/arm64/address_space.cpp
+--- a/src/dynarmic/backend/arm64/address_space.cpp
++++ b/src/dynarmic/backend/arm64/address_space.cpp
+@@ -126,24 +126,22 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
+     UnprotectCodeMemory();
+ 
+     EmittedBlockInfo block_info = EmitArm64(code, std::move(block), GetEmitConfig(), fastmem_manager);
+-
+     Link(block_info);
+-
+     mem.invalidate(reinterpret_cast<u32*>(block_info.entry_point), block_info.size);
+-    ProtectCodeMemory();
+ 
+     const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
+     const auto entry = reinterpret_cast<std::uintptr_t>(block_info.entry_point);
+     ASSERT(entry >= rx_base);
+     ASSERT(entry < rx_base + code_cache_size);
+ 
++    // Register the new block while the JIT remains writable so existing blocks
++    // can be relinked to it in the same publication transaction. Oaknut merges
++    // all emitted and patched ranges and publishes them once at the end.
+     ASSERT(block_entries.insert({block.Location(), block_info.entry_point}).second);
+     ASSERT(reverse_block_entries.insert({block_info.entry_point, block.Location()}).second);
+     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
+ 
+-    UnprotectCodeMemory();
+     RelinkForDescriptor(block.Location(), block_info.entry_point);
+     ProtectCodeMemory();
+ 
