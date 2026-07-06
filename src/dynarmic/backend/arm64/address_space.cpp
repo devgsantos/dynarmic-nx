@@ -21,6 +21,26 @@
 
 namespace Dynarmic::Backend::Arm64 {
 
+#if defined(__SWITCH__)
+namespace {
+
+thread_local std::uint32_t switch_emit_log_count = 0;
+
+void LogSwitchEmit(const char* phase, std::uintptr_t guest_pc, std::uintptr_t entry_point,
+                   std::size_t size) {
+    if (switch_emit_log_count >= 64) {
+        return;
+    }
+    ++switch_emit_log_count;
+    std::fprintf(stderr, "[Dynarmic.Emit] %s guest_pc=0x%08x entry=0x%016llx size=%zu\n",
+                 phase, static_cast<unsigned>(guest_pc),
+                 static_cast<unsigned long long>(entry_point), size);
+    std::fflush(stderr);
+}
+
+} // namespace
+#endif
+
 AddressSpace::AddressSpace(size_t code_cache_size)
         : code_cache_size(code_cache_size)
         , mem(code_cache_size)
@@ -67,11 +87,21 @@ CodePtr AddressSpace::ReverseGetEntryPoint(CodePtr host_pc) {
 
 CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     if (CodePtr block_entry = Get(descriptor)) {
+#if defined(__SWITCH__)
+        LogSwitchEmit("cache-hit", 0, reinterpret_cast<std::uintptr_t>(block_entry), 0);
+#endif
         return block_entry;
     }
 
+#if defined(__SWITCH__)
+    LogSwitchEmit("emit-begin", 0, 0, 0);
+#endif
     IR::Block ir_block = GenerateIR(descriptor);
     const EmittedBlockInfo block_info = Emit(std::move(ir_block));
+#if defined(__SWITCH__)
+    LogSwitchEmit("emit-end", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
+                  block_info.size);
+#endif
     return block_info.entry_point;
 }
 
@@ -144,6 +174,11 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     ProtectCodeMemory();
 
     RegisterNewBasicBlock(block, block_info);
+
+#if defined(__SWITCH__)
+    LogSwitchEmit("registered", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
+                  block_info.size);
+#endif
 
     return block_info;
 }

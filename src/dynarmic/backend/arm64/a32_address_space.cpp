@@ -20,6 +20,10 @@
 #include "dynarmic/interface/exclusive_monitor.h"
 #include "dynarmic/ir/opt/passes.h"
 
+#if defined(__SWITCH__)
+#include <cstdio>
+#endif
+
 namespace Dynarmic::Backend::Arm64 {
 
 #if defined(__SWITCH__)
@@ -604,10 +608,18 @@ EmitConfig A32AddressSpace::GetEmitConfig() {
     };
 }
 
-void A32AddressSpace::RegisterNewBasicBlock(const IR::Block& block, const EmittedBlockInfo&) {
+void A32AddressSpace::RegisterNewBasicBlock(const IR::Block& block, const EmittedBlockInfo& block_info) {
     const A32::LocationDescriptor descriptor{block.Location()};
     const A32::LocationDescriptor end_location{block.EndLocation()};
     const auto range = boost::icl::discrete_interval<u32>::closed(descriptor.PC(), end_location.PC() - 1);
+#if defined(__SWITCH__)
+    std::fprintf(stderr,
+                 "[Dynarmic.Block] guest_pc=0x%08x end_pc=0x%08x entry=0x%016llx size=%zu\n",
+                 descriptor.PC(), end_location.PC(),
+                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(block_info.entry_point)),
+                 block_info.size);
+    std::fflush(stderr);
+#endif
     block_ranges.AddRange(range, descriptor);
 }
 

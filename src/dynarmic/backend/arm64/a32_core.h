@@ -8,6 +8,7 @@
 #if defined(__SWITCH__)
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #endif
 
 #include "dynarmic/backend/arm64/a32_address_space.h"
@@ -46,11 +47,22 @@ public:
         const u64 ticks_to_run = A32::SwitchCycleBudget::GetRequestedTicks();
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(7, run_entry, guest_pc);
 
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] Run enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc,
+                     static_cast<unsigned long long>(ticks_to_run));
+        std::fflush(stderr);
+
         const HaltReason result = RunWithTicks(process, thread_ctx, halt_reason,
                                                ticks_to_run, ticks_executed, false);
 
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] Run leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc_after,
+                     static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        std::fflush(stderr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
@@ -75,10 +87,20 @@ public:
         }
 
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(8, run_entry, guest_pc);
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] RunWithTicks enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc,
+                     static_cast<unsigned long long>(ticks_to_run));
+        std::fflush(stderr);
         const HaltReason result = process.prelude_info.run_code(
             entry_point, &thread_ctx, halt_reason, ticks_to_run, &ticks_executed);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] RunWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc_after,
+                     static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        std::fflush(stderr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
         return result;
     }
@@ -94,10 +116,21 @@ public:
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
 
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] Step enter entry=0x%016llx guest_pc=0x%08x\n",
+                     static_cast<unsigned long long>(run_entry),
+                     location_descriptor.PC());
+        std::fflush(stderr);
+
         const HaltReason result = StepWithTicks(process, thread_ctx, halt_reason,
                                                 ticks_executed, false);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] Step leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc_after,
+                     static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        std::fflush(stderr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
@@ -123,10 +156,19 @@ public:
 
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             8, run_entry, location_descriptor.PC());
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] StepWithTicks enter entry=0x%016llx guest_pc=0x%08x\n",
+                     static_cast<unsigned long long>(run_entry), location_descriptor.PC());
+        std::fflush(stderr);
         const HaltReason result = process.prelude_info.step_code(
             entry_point, &thread_ctx, halt_reason, 1, &ticks_executed);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
+        std::fprintf(stderr,
+                     "[Dynarmic.Core] StepWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d\n",
+                     static_cast<unsigned long long>(run_entry), guest_pc_after,
+                     static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        std::fflush(stderr);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
         return result;
     }
