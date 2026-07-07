@@ -615,7 +615,7 @@ void A32AddressSpace::RegisterNewBasicBlock(const IR::Block& block, const Emitte
     const A32::LocationDescriptor descriptor{block.Location()};
     const A32::LocationDescriptor end_location{block.EndLocation()};
     const auto range = boost::icl::discrete_interval<u32>::closed(descriptor.PC(), end_location.PC() - 1);
-#if defined(__SWITCH__)
+#if defined(__SWITCH__) && defined(AZAHAR_SWITCH_TRACE_DYNARMIC_BLOCKS)
     std::array<char, 160> buffer{};
     std::snprintf(buffer.data(), buffer.size(),
                   "guest_pc=0x%08x end_pc=0x%08x entry=0x%016llx size=%zu",

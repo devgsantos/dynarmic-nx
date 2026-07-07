@@ -34,6 +34,12 @@ inline void LogSwitchCore(const char* format, Args... args) noexcept {
     std::snprintf(buffer.data(), buffer.size(), format, args...);
     azahar_switch_dynarmic_jit_log_message("Dynarmic.Core", buffer.data());
 }
+
+#if defined(AZAHAR_SWITCH_TRACE_DYNARMIC_CORE)
+#define DYNARMIC_CORE_TRACE(...) LogSwitchCore(__VA_ARGS__)
+#else
+#define DYNARMIC_CORE_TRACE(...) ((void)0)
+#endif
 #endif
 
 namespace Dynarmic::Backend::Arm64 {
@@ -57,18 +63,19 @@ public:
         const u64 ticks_to_run = A32::SwitchCycleBudget::GetRequestedTicks();
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(7, run_entry, guest_pc);
 
-        LogSwitchCore("Run enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
-                  static_cast<unsigned long long>(run_entry), guest_pc,
-                  static_cast<unsigned long long>(ticks_to_run));
+        DYNARMIC_CORE_TRACE("Run enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
+                    static_cast<unsigned long long>(run_entry), guest_pc,
+                    static_cast<unsigned long long>(ticks_to_run));
 
         const HaltReason result = RunWithTicks(process, thread_ctx, halt_reason,
                                                ticks_to_run, ticks_executed, false);
 
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-        LogSwitchCore("Run leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
-                  static_cast<unsigned long long>(run_entry), guest_pc_after,
-                  static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        DYNARMIC_CORE_TRACE(
+            "Run leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
+            static_cast<unsigned long long>(run_entry), guest_pc_after,
+            static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
@@ -93,16 +100,17 @@ public:
         }
 
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(8, run_entry, guest_pc);
-        LogSwitchCore("RunWithTicks enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
-                  static_cast<unsigned long long>(run_entry), guest_pc,
-                  static_cast<unsigned long long>(ticks_to_run));
+        DYNARMIC_CORE_TRACE("RunWithTicks enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
+                    static_cast<unsigned long long>(run_entry), guest_pc,
+                    static_cast<unsigned long long>(ticks_to_run));
         const HaltReason result = process.prelude_info.run_code(
             entry_point, &thread_ctx, halt_reason, ticks_to_run, &ticks_executed);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-        LogSwitchCore("RunWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
-                  static_cast<unsigned long long>(run_entry), guest_pc_after,
-                  static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        DYNARMIC_CORE_TRACE(
+            "RunWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
+            static_cast<unsigned long long>(run_entry), guest_pc_after,
+            static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
         return result;
     }
@@ -118,17 +126,18 @@ public:
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
 
-        LogSwitchCore("Step enter entry=0x%016llx guest_pc=0x%08x",
-                  static_cast<unsigned long long>(run_entry),
-                  location_descriptor.PC());
+        DYNARMIC_CORE_TRACE("Step enter entry=0x%016llx guest_pc=0x%08x",
+                    static_cast<unsigned long long>(run_entry),
+                    location_descriptor.PC());
 
         const HaltReason result = StepWithTicks(process, thread_ctx, halt_reason,
                                                 ticks_executed, false);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-        LogSwitchCore("Step leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
-                  static_cast<unsigned long long>(run_entry), guest_pc_after,
-                  static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        DYNARMIC_CORE_TRACE(
+            "Step leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
+            static_cast<unsigned long long>(run_entry), guest_pc_after,
+            static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
@@ -154,15 +163,16 @@ public:
 
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(
             8, run_entry, location_descriptor.PC());
-        LogSwitchCore("StepWithTicks enter entry=0x%016llx guest_pc=0x%08x",
-                  static_cast<unsigned long long>(run_entry), location_descriptor.PC());
+        DYNARMIC_CORE_TRACE("StepWithTicks enter entry=0x%016llx guest_pc=0x%08x",
+                    static_cast<unsigned long long>(run_entry), location_descriptor.PC());
         const HaltReason result = process.prelude_info.step_code(
             entry_point, &thread_ctx, halt_reason, 1, &ticks_executed);
         const auto guest_pc_after =
             A32::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC();
-        LogSwitchCore("StepWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
-                  static_cast<unsigned long long>(run_entry), guest_pc_after,
-                  static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
+        DYNARMIC_CORE_TRACE(
+            "StepWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
+            static_cast<unsigned long long>(run_entry), guest_pc_after,
+            static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
         azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
         return result;
     }
