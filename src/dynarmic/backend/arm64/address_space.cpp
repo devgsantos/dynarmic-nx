@@ -182,6 +182,10 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     Link(block_info);
     mem.invalidate(reinterpret_cast<u32*>(block_info.entry_point), block_info.size);
 
+#if defined(__SWITCH__) && !defined(AZAHAR_SWITCH_DYNARMIC_CONSOLIDATED_PUBLISH)
+    ProtectCodeMemory();
+#endif
+
     const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
     const auto entry = reinterpret_cast<std::uintptr_t>(block_info.entry_point);
     ASSERT(entry >= rx_base);
@@ -191,6 +195,9 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     ASSERT(reverse_block_entries.insert({block_info.entry_point, descriptor}).second);
     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
 
+#if defined(__SWITCH__) && !defined(AZAHAR_SWITCH_DYNARMIC_CONSOLIDATED_PUBLISH)
+    UnprotectCodeMemory();
+#endif
     RelinkForDescriptor(descriptor, block_info.entry_point);
     ProtectCodeMemory();
 
