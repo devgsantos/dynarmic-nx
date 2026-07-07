@@ -28,11 +28,27 @@ extern "C" void azahar_switch_dynarmic_jit_set_breadcrumb_phase(
 extern "C" void azahar_switch_dynarmic_jit_log_message(
     const char* tag, const char* message) noexcept;
 
+inline void SetSwitchBreadcrumbPhase(std::uint32_t phase, std::uintptr_t block_entry,
+                                     std::uint32_t guest_pc) noexcept {
+#if defined(AZAHAR_SWITCH_CRASH_BREADCRUMBS)
+    azahar_switch_dynarmic_jit_set_breadcrumb_phase(phase, block_entry, guest_pc);
+#else
+    (void)phase;
+    (void)block_entry;
+    (void)guest_pc;
+#endif
+}
+
 template<typename... Args>
 inline void LogSwitchCore(const char* format, Args... args) noexcept {
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
     std::array<char, 192> buffer{};
     std::snprintf(buffer.data(), buffer.size(), format, args...);
     azahar_switch_dynarmic_jit_log_message("Dynarmic.Core", buffer.data());
+#else
+    (void)format;
+    ((void)args, ...);
+#endif
 }
 #endif
 
@@ -53,9 +69,9 @@ public:
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
 
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry, guest_pc);
+        SetSwitchBreadcrumbPhase(6, run_entry, guest_pc);
         const u64 ticks_to_run = A32::SwitchCycleBudget::GetRequestedTicks();
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(7, run_entry, guest_pc);
+        SetSwitchBreadcrumbPhase(7, run_entry, guest_pc);
 
         LogSwitchCore("Run enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
                   static_cast<unsigned long long>(run_entry), guest_pc,
@@ -69,9 +85,9 @@ public:
         LogSwitchCore("Run leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
                   static_cast<unsigned long long>(run_entry), guest_pc_after,
                   static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(11, run_entry, guest_pc_after);
         return result;
 #else
         return process.prelude_info.run_code(entry_point, &thread_ctx, halt_reason);
@@ -92,7 +108,7 @@ public:
             assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
         }
 
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(8, run_entry, guest_pc);
+        SetSwitchBreadcrumbPhase(8, run_entry, guest_pc);
         LogSwitchCore("RunWithTicks enter entry=0x%016llx guest_pc=0x%08x ticks_to_run=%llu",
                   static_cast<unsigned long long>(run_entry), guest_pc,
                   static_cast<unsigned long long>(ticks_to_run));
@@ -103,7 +119,7 @@ public:
         LogSwitchCore("RunWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
                   static_cast<unsigned long long>(run_entry), guest_pc_after,
                   static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(9, run_entry, guest_pc_after);
         return result;
     }
 #endif
@@ -129,9 +145,9 @@ public:
         LogSwitchCore("Step leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
                   static_cast<unsigned long long>(run_entry), guest_pc_after,
                   static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(10, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(10, run_entry, guest_pc_after);
         A32::SwitchCycleBudget::SetExecutedTicks(ticks_executed);
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(11, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(11, run_entry, guest_pc_after);
         return result;
 #else
         return process.prelude_info.step_code(entry_point, &thread_ctx, halt_reason);
@@ -152,8 +168,7 @@ public:
             assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
         }
 
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(
-            8, run_entry, location_descriptor.PC());
+        SetSwitchBreadcrumbPhase(8, run_entry, location_descriptor.PC());
         LogSwitchCore("StepWithTicks enter entry=0x%016llx guest_pc=0x%08x",
                   static_cast<unsigned long long>(run_entry), location_descriptor.PC());
         const HaltReason result = process.prelude_info.step_code(
@@ -163,7 +178,7 @@ public:
         LogSwitchCore("StepWithTicks leave entry=0x%016llx guest_pc_after=0x%08x ticks_executed=%llu result=%d",
                   static_cast<unsigned long long>(run_entry), guest_pc_after,
                   static_cast<unsigned long long>(ticks_executed), static_cast<int>(result));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(9, run_entry, guest_pc_after);
+        SetSwitchBreadcrumbPhase(9, run_entry, guest_pc_after);
         return result;
     }
 #endif

@@ -20,6 +20,17 @@ extern "C" void azahar_switch_dynarmic_jit_log_run_entry(
     std::uintptr_t run_entry) noexcept;
 extern "C" void azahar_switch_dynarmic_jit_set_breadcrumb_phase(
     std::uint32_t phase, std::uintptr_t block_entry, std::uint32_t guest_pc) noexcept;
+
+inline void SetSwitchBreadcrumbPhase(std::uint32_t phase, std::uintptr_t block_entry,
+                                     std::uint32_t guest_pc) noexcept {
+#if defined(AZAHAR_SWITCH_CRASH_BREADCRUMBS)
+    azahar_switch_dynarmic_jit_set_breadcrumb_phase(phase, block_entry, guest_pc);
+#else
+    (void)phase;
+    (void)block_entry;
+    (void)guest_pc;
+#endif
+}
 #endif
 
 namespace Dynarmic::Backend::Arm64 {
@@ -35,12 +46,12 @@ public:
         const auto run_entry = reinterpret_cast<std::uintptr_t>(entry_point);
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry,
-                                                        static_cast<std::uint32_t>(
-                                                            A64::LocationDescriptor{location_descriptor}.PC()));
+        SetSwitchBreadcrumbPhase(
+            6, run_entry,
+            static_cast<std::uint32_t>(A64::LocationDescriptor{location_descriptor}.PC()));
         const HaltReason result = process.prelude_info.run_code(
             entry_point, &thread_ctx, halt_reason, 0, nullptr);
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(
+        SetSwitchBreadcrumbPhase(
             7, run_entry, static_cast<std::uint32_t>(
                               A64::LocationDescriptor{thread_ctx.GetLocationDescriptor()}.PC()));
         return result;
@@ -56,11 +67,11 @@ public:
         const auto run_entry = reinterpret_cast<std::uintptr_t>(entry_point);
         azahar_switch_dynarmic_jit_log_run_entry(run_entry);
         assert(azahar_switch_dynarmic_jit_is_rx_address(run_entry));
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(6, run_entry,
-                                                        static_cast<std::uint32_t>(location_descriptor.PC()));
+        SetSwitchBreadcrumbPhase(6, run_entry,
+                                 static_cast<std::uint32_t>(location_descriptor.PC()));
         const HaltReason result = process.prelude_info.step_code(
             entry_point, &thread_ctx, halt_reason, 0, nullptr);
-        azahar_switch_dynarmic_jit_set_breadcrumb_phase(
+        SetSwitchBreadcrumbPhase(
             7, run_entry, static_cast<std::uint32_t>(thread_ctx.GetLocationDescriptor().PC()));
         return result;
 #else
