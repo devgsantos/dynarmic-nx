@@ -25,6 +25,8 @@ namespace Dynarmic::Backend::Arm64 {
 #if defined(__SWITCH__)
 extern "C" void azahar_switch_dynarmic_jit_log_message(
     const char* tag, const char* message) noexcept;
+extern "C" void azahar_switch_dynarmic_jit_record_cache_clear() noexcept;
+extern "C" void azahar_switch_dynarmic_jit_record_block_compiled() noexcept;
 
 namespace {
 
@@ -104,19 +106,20 @@ CodePtr AddressSpace::ReverseGetEntryPoint(CodePtr host_pc) {
 CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     if (CodePtr block_entry = Get(descriptor)) {
 #if defined(__SWITCH__)
-        LogSwitchEmit("cache-hit", 0, reinterpret_cast<std::uintptr_t>(block_entry), 0);
+        LogSwitchEmit("cache-hit", descriptor.Value(),
+                      reinterpret_cast<std::uintptr_t>(block_entry), 0);
 #endif
         return block_entry;
     }
 
 #if defined(__SWITCH__)
-    LogSwitchEmit("emit-begin", 0, 0, 0);
+    LogSwitchEmit("emit-begin", descriptor.Value(), 0, 0);
 #endif
     IR::Block ir_block = GenerateIR(descriptor);
     const EmittedBlockInfo block_info = Emit(std::move(ir_block));
 #if defined(__SWITCH__)
-    LogSwitchEmit("emit-end", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
-                  block_info.size);
+    LogSwitchEmit("emit-end", descriptor.Value(),
+                  reinterpret_cast<std::uintptr_t>(block_info.entry_point), block_info.size);
 #endif
     return block_info.entry_point;
 }
@@ -146,6 +149,9 @@ void AddressSpace::ClearCache() {
     block_infos.clear();
     block_references.clear();
     code.set_offset(prelude_info.end_of_prelude);
+#if defined(__SWITCH__)
+    azahar_switch_dynarmic_jit_record_cache_clear();
+#endif
 }
 
 void AddressSpace::DumpDisassembly() const {
@@ -167,33 +173,35 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
         ClearCache();
     }
 
+    const IR::LocationDescriptor descriptor = block.Location();
+    const IR::LocationDescriptor end_descriptor = block.EndLocation();
     UnprotectCodeMemory();
 
     EmittedBlockInfo block_info = EmitArm64(code, std::move(block), GetEmitConfig(), fastmem_manager);
 
     Link(block_info);
-
     mem.invalidate(reinterpret_cast<u32*>(block_info.entry_point), block_info.size);
-    ProtectCodeMemory();
 
     const auto rx_base = reinterpret_cast<std::uintptr_t>(mem.xptr());
     const auto entry = reinterpret_cast<std::uintptr_t>(block_info.entry_point);
     ASSERT(entry >= rx_base);
     ASSERT(entry < rx_base + code_cache_size);
 
-    ASSERT(block_entries.insert({block.Location(), block_info.entry_point}).second);
-    ASSERT(reverse_block_entries.insert({block_info.entry_point, block.Location()}).second);
+    ASSERT(block_entries.insert({descriptor, block_info.entry_point}).second);
+    ASSERT(reverse_block_entries.insert({block_info.entry_point, descriptor}).second);
     ASSERT(block_infos.insert({block_info.entry_point, block_info}).second);
 
-    UnprotectCodeMemory();
-    RelinkForDescriptor(block.Location(), block_info.entry_point);
+    RelinkForDescriptor(descriptor, block_info.entry_point);
     ProtectCodeMemory();
 
-    RegisterNewBasicBlock(block, block_info);
+#if defined(__SWITCH__)
+    azahar_switch_dynarmic_jit_record_block_compiled();
+#endif
+    RegisterNewBasicBlock(descriptor, end_descriptor, block_info);
 
 #if defined(__SWITCH__)
-    LogSwitchEmit("registered", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
-                  block_info.size);
+    LogSwitchEmit("registered", descriptor.Value(),
+                  reinterpret_cast<std::uintptr_t>(block_info.entry_point), block_info.size);
 #endif
 
     return block_info;
