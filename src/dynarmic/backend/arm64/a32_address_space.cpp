@@ -22,6 +22,7 @@
 
 #if defined(__SWITCH__)
 #include <cstdio>
+#include <array>
 #endif
 
 namespace Dynarmic::Backend::Arm64 {
@@ -36,6 +37,8 @@ extern "C" void azahar_switch_dynarmic_jit_log_prelude_target(
 extern "C" void azahar_switch_dynarmic_jit_log_a32_svc(
     std::uint32_t svc, std::uintptr_t callback_target, std::uintptr_t continuation,
     std::uint32_t guest_pc) noexcept;
+extern "C" void azahar_switch_dynarmic_jit_log_message(
+    const char* tag, const char* message) noexcept;
 #endif
 
 template<auto mfp, typename T>
@@ -613,12 +616,13 @@ void A32AddressSpace::RegisterNewBasicBlock(const IR::Block& block, const Emitte
     const A32::LocationDescriptor end_location{block.EndLocation()};
     const auto range = boost::icl::discrete_interval<u32>::closed(descriptor.PC(), end_location.PC() - 1);
 #if defined(__SWITCH__)
-    std::fprintf(stderr,
-                 "[Dynarmic.Block] guest_pc=0x%08x end_pc=0x%08x entry=0x%016llx size=%zu\n",
-                 descriptor.PC(), end_location.PC(),
-                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(block_info.entry_point)),
-                 block_info.size);
-    std::fflush(stderr);
+    std::array<char, 160> buffer{};
+    std::snprintf(buffer.data(), buffer.size(),
+                  "guest_pc=0x%08x end_pc=0x%08x entry=0x%016llx size=%zu",
+                  descriptor.PC(), end_location.PC(),
+                  static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(block_info.entry_point)),
+                  block_info.size);
+    azahar_switch_dynarmic_jit_log_message("Dynarmic.Block", buffer.data());
 #endif
     block_ranges.AddRange(range, descriptor);
 }

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: 0BSD
  */
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 
@@ -22,6 +23,9 @@
 namespace Dynarmic::Backend::Arm64 {
 
 #if defined(__SWITCH__)
+extern "C" void azahar_switch_dynarmic_jit_log_message(
+    const char* tag, const char* message) noexcept;
+
 namespace {
 
 thread_local std::uint32_t switch_emit_log_count = 0;
@@ -32,10 +36,13 @@ void LogSwitchEmit(const char* phase, std::uintptr_t guest_pc, std::uintptr_t en
         return;
     }
     ++switch_emit_log_count;
-    std::fprintf(stderr, "[Dynarmic.Emit] %s guest_pc=0x%08x entry=0x%016llx size=%zu\n",
-                 phase, static_cast<unsigned>(guest_pc),
-                 static_cast<unsigned long long>(entry_point), size);
-    std::fflush(stderr);
+    std::array<char, 192> buffer{};
+    std::snprintf(buffer.data(), buffer.size(),
+                  "%s guest_pc=0x%08x entry=0x%016llx size=%zu",
+                  phase != nullptr ? phase : "unknown",
+                  static_cast<unsigned>(guest_pc),
+                  static_cast<unsigned long long>(entry_point), size);
+    azahar_switch_dynarmic_jit_log_message("Dynarmic.Emit", buffer.data());
 }
 
 } // namespace
