@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: 0BSD
  */
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 
@@ -20,6 +21,41 @@
 #include "dynarmic/interface/exclusive_monitor.h"
 
 namespace Dynarmic::Backend::Arm64 {
+
+#if defined(__SWITCH__)
+extern "C" void azahar_switch_dynarmic_jit_log_message(
+    const char* tag, const char* message) noexcept;
+
+namespace {
+
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
+thread_local std::uint32_t switch_emit_log_count = 0;
+#endif
+
+void LogSwitchEmit(const char* phase, std::uintptr_t guest_pc, std::uintptr_t entry_point,
+                   std::size_t size) {
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
+    if (switch_emit_log_count >= 64) {
+        return;
+    }
+    ++switch_emit_log_count;
+    std::array<char, 192> buffer{};
+    std::snprintf(buffer.data(), buffer.size(),
+                  "%s guest_pc=0x%08x entry=0x%016llx size=%zu",
+                  phase != nullptr ? phase : "unknown",
+                  static_cast<unsigned>(guest_pc),
+                  static_cast<unsigned long long>(entry_point), size);
+    azahar_switch_dynarmic_jit_log_message("Dynarmic.Emit", buffer.data());
+#else
+    (void)phase;
+    (void)guest_pc;
+    (void)entry_point;
+    (void)size;
+#endif
+}
+
+} // namespace
+#endif
 
 AddressSpace::AddressSpace(size_t code_cache_size)
         : code_cache_size(code_cache_size)
@@ -67,11 +103,21 @@ CodePtr AddressSpace::ReverseGetEntryPoint(CodePtr host_pc) {
 
 CodePtr AddressSpace::GetOrEmit(IR::LocationDescriptor descriptor) {
     if (CodePtr block_entry = Get(descriptor)) {
+#if defined(__SWITCH__)
+        LogSwitchEmit("cache-hit", 0, reinterpret_cast<std::uintptr_t>(block_entry), 0);
+#endif
         return block_entry;
     }
 
+#if defined(__SWITCH__)
+    LogSwitchEmit("emit-begin", 0, 0, 0);
+#endif
     IR::Block ir_block = GenerateIR(descriptor);
     const EmittedBlockInfo block_info = Emit(std::move(ir_block));
+#if defined(__SWITCH__)
+    LogSwitchEmit("emit-end", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
+                  block_info.size);
+#endif
     return block_info.entry_point;
 }
 
@@ -144,6 +190,11 @@ EmittedBlockInfo AddressSpace::Emit(IR::Block block) {
     ProtectCodeMemory();
 
     RegisterNewBasicBlock(block, block_info);
+
+#if defined(__SWITCH__)
+    LogSwitchEmit("registered", 0, reinterpret_cast<std::uintptr_t>(block_info.entry_point),
+                  block_info.size);
+#endif
 
     return block_info;
 }
