@@ -30,9 +30,14 @@ extern "C" void azahar_switch_dynarmic_jit_log_message(
 
 template<typename... Args>
 inline void LogSwitchCore(const char* format, Args... args) noexcept {
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
     std::array<char, 192> buffer{};
     std::snprintf(buffer.data(), buffer.size(), format, args...);
     azahar_switch_dynarmic_jit_log_message("Dynarmic.Core", buffer.data());
+#else
+    (void)format;
+    ((void)args, ...);
+#endif
 }
 
 #if defined(AZAHAR_SWITCH_TRACE_DYNARMIC_CORE)

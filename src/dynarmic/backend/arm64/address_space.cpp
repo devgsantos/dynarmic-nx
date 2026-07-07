@@ -28,10 +28,13 @@ extern "C" void azahar_switch_dynarmic_jit_log_message(
 
 namespace {
 
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
 thread_local std::uint32_t switch_emit_log_count = 0;
+#endif
 
 void LogSwitchEmit(const char* phase, std::uintptr_t guest_pc, std::uintptr_t entry_point,
                    std::size_t size) {
+#if defined(AZAHAR_SWITCH_DYNARMIC_VERBOSE_TEXT_LOGS)
     if (switch_emit_log_count >= 64) {
         return;
     }
@@ -43,6 +46,12 @@ void LogSwitchEmit(const char* phase, std::uintptr_t guest_pc, std::uintptr_t en
                   static_cast<unsigned>(guest_pc),
                   static_cast<unsigned long long>(entry_point), size);
     azahar_switch_dynarmic_jit_log_message("Dynarmic.Emit", buffer.data());
+#else
+    (void)phase;
+    (void)guest_pc;
+    (void)entry_point;
+    (void)size;
+#endif
 }
 
 } // namespace
